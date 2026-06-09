@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+*.log
+/root/.pm2/
+.DS_Store
+*.bak*
+server.cjs.bak*
+server.cjs.backup
+*.localstorage
