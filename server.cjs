@@ -215,6 +215,8 @@ app.post('/api/billing/invoices', auth, roles('super_admin','admin','billing'), 
   res.json({ success: true, data: r.rows[0] });
 });
 
+require("./external-api.cjs")(app, pool, auth);
+require("./users-api.cjs")(app, pool, auth, roles);
 // ===================== DASHBOARD =====================
 app.get('/api/dashboard/stats', auth, async (req, res) => {
   const r = await pool.query(`SELECT (SELECT COUNT(*) FROM clients) as tc, (SELECT COUNT(*) FROM clients WHERE status='active') as ac, (SELECT COUNT(*) FROM suppliers) as ts, (SELECT COUNT(*) FROM suppliers WHERE status='active') as asu, (SELECT COUNT(*) FROM sms_logs WHERE submit_time::date=CURRENT_DATE) as sms_t, (SELECT COUNT(*) FROM sms_logs WHERE submit_time::date=CURRENT_DATE AND status='delivered') as del_t, (SELECT COUNT(*) FROM suppliers WHERE bind_status='bound') as ab, (SELECT COUNT(*) FROM suppliers) as tb`);
