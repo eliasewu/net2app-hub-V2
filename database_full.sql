@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict BwMvjgpt7vsE1dmWFvCYaIcb5vS1YrH5CXe5lBhs7DCHBofSSy4dVDqOxdmxoeR
+\restrict s9AGRICbiu7NZJNmGL0epAixM6Kdj3ft5YOuCaLNvfpZOjTLswv96FA5Nry98bh
 
 -- Dumped from database version 14.23 (Ubuntu 14.23-0ubuntu0.22.04.1)
 -- Dumped by pg_dump version 14.23 (Ubuntu 14.23-0ubuntu0.22.04.1)
@@ -551,6 +551,8 @@ CREATE TABLE public.clients (
     status character varying(20) DEFAULT 'active'::character varying,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    api_key character varying(255),
+    dlr_callback_url character varying(500),
     CONSTRAINT clients_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'inactive'::character varying, 'suspended'::character varying])::text[])))
 );
 
@@ -1247,6 +1249,7 @@ CREATE TABLE public.sms_logs (
     submit_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     delivery_time timestamp without time zone,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    dlr_callback_url character varying(500),
     CONSTRAINT sms_logs_status_check CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'submitted'::character varying, 'sent'::character varying, 'delivered'::character varying, 'failed'::character varying, 'expired'::character varying, 'rejected'::character varying])::text[])))
 );
 
@@ -1902,8 +1905,8 @@ ALTER TABLE ONLY public.voice_otp_logs ALTER COLUMN id SET DEFAULT nextval('publ
 -- Data for Name: clients; Type: TABLE DATA; Schema: public; Owner: sms_user
 --
 
-INSERT INTO public.clients VALUES (1, 'CLT001', 'TechCorp Global', 'John Smith', 'john@techcorp.com', '+1234567890', '123 Tech Street, Silicon Valley', 'USA', 'techcorp_smpp', 'secure123', '0.0.0.0', 2775, 'SMPP', 100, 'dlr', 'EUR', 5000.0000, 10000.0000, false, NULL, false, 150, NULL, NULL, 'active', '2026-06-09 09:39:09.507862', '2026-06-09 09:39:09.507862');
-INSERT INTO public.clients VALUES (4, 'TriAngle', 'Triangle', NULL, 'triangle@gmail.com', NULL, NULL, NULL, 'tuesday', 'tuesday', '0.0.0.0', 2775, 'SMPP', 100, 'dlr', 'EUR', 0.0000, 100.0000, false, NULL, false, 150, NULL, NULL, 'active', '2026-06-09 11:27:01.12768', '2026-06-09 11:27:01.12768');
+INSERT INTO public.clients VALUES (1, 'CLT001', 'TechCorp Global', 'John Smith', 'john@techcorp.com', '+1234567890', '123 Tech Street, Silicon Valley', 'USA', 'techcorp_smpp', 'secure123', '0.0.0.0', 2775, 'SMPP', 100, 'dlr', 'EUR', 5000.0000, 10000.0000, true, NULL, false, 150, NULL, NULL, 'active', '2026-06-09 09:39:09.507862', '2026-06-09 15:38:04.238383', 'net2app_232f18b45664b8e1ed526b0f45436bfb426bb8b38db32405', NULL);
+INSERT INTO public.clients VALUES (4, 'TriAngle', 'Triangle', NULL, 'triangle@gmail.com', NULL, NULL, NULL, 'tuesday', 'tuesday', '0.0.0.0', 2775, 'SMPP', 100, 'dlr', 'EUR', -0.0500, 100.0000, true, NULL, false, 150, NULL, NULL, 'active', '2026-06-09 11:27:01.12768', '2026-06-09 15:39:24.392424', 'net2app_1af5e9becda42dfa041c75c8bed458709426cfbc7fa468e7', NULL);
 
 
 --
@@ -2034,6 +2037,14 @@ INSERT INTO public.routes VALUES (4, 'Voice OTP Fallback', '{5}', 'priority', tr
 -- Data for Name: sms_logs; Type: TABLE DATA; Schema: public; Owner: sms_user
 --
 
+INSERT INTO public.sms_logs VALUES (1, 'API_1781017530707_xjyk3o662', 1, 'CLT001', NULL, NULL, 'NET2APP', '1234567890', NULL, NULL, NULL, NULL, 'Hello from REST API', 1, 0.025000, 0.000000, 0.000000, 'EUR', 'submitted', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, 0, 0, '2026-06-09 15:05:30.707659', NULL, '2026-06-09 15:05:30.707659', NULL);
+INSERT INTO public.sms_logs VALUES (2, 'API_1781017615063_1bgw7r0d4', 1, 'CLT001', NULL, NULL, 'BRAND', '1234567890', NULL, NULL, NULL, NULL, 'Hello', 1, 0.025000, 0.000000, 0.000000, 'EUR', 'submitted', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, 0, 0, '2026-06-09 15:06:55.063517', NULL, '2026-06-09 15:06:55.063517', NULL);
+INSERT INTO public.sms_logs VALUES (3, 'API_1781017891711_a5cwcxvm3', 1, 'CLT001', NULL, NULL, 'BRAND', '1234567890', NULL, NULL, NULL, NULL, 'Hello', 1, 0.025000, 0.000000, 0.000000, 'EUR', 'submitted', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, 0, 0, '2026-06-09 15:11:31.711766', NULL, '2026-06-09 15:11:31.711766', NULL);
+INSERT INTO public.sms_logs VALUES (4, 'MSG1781019529268ac3r2k', 4, 'TriAngle', NULL, NULL, 'TRIANGLE', '1234567890', NULL, NULL, NULL, NULL, 'Hello', 1, 0.025000, 0.015000, 0.010000, 'EUR', 'submitted', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, 0, 0, '2026-06-09 15:38:49.269224', NULL, '2026-06-09 15:38:49.269224', NULL);
+INSERT INTO public.sms_logs VALUES (5, 'MSG17810195292966ilndj', 1, 'CLT001', NULL, NULL, 'TECHCORP', '1234567890', NULL, NULL, NULL, NULL, 'Hello', 1, 0.025000, 0.015000, 0.010000, 'EUR', 'submitted', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, 0, 0, '2026-06-09 15:38:49.296433', NULL, '2026-06-09 15:38:49.296433', NULL);
+INSERT INTO public.sms_logs VALUES (6, 'MSG1781019533882012phx', 4, 'TriAngle', NULL, NULL, 'TRIANGLE', '1234567890', NULL, NULL, NULL, NULL, 'Hello', 1, 0.025000, 0.015000, 0.010000, 'EUR', 'delivered', 'DELIVRD', '2026-06-09 15:38:57.142742', NULL, NULL, NULL, NULL, NULL, NULL, 1, 0, 0, '2026-06-09 15:38:53.883379', '2026-06-09 15:38:57.142742', '2026-06-09 15:38:53.883379', NULL);
+INSERT INTO public.sms_logs VALUES (7, 'MSG1781019533903m4npqs', 1, 'CLT001', NULL, NULL, 'TECHCORP', '1234567890', NULL, NULL, NULL, NULL, 'Hello', 1, 0.025000, 0.015000, 0.010000, 'EUR', 'failed', 'UNDELIV', '2026-06-09 15:38:58.992101', NULL, NULL, NULL, NULL, NULL, NULL, 1, 0, 0, '2026-06-09 15:38:53.903828', '2026-06-09 15:38:58.992101', '2026-06-09 15:38:53.903828', NULL);
+INSERT INTO public.sms_logs VALUES (8, 'MSG178101956129177r8ay', 4, 'TriAngle', NULL, NULL, 'TRIANGLE', '1234567890', NULL, NULL, NULL, NULL, 'Hello', 1, 0.025000, 0.015000, 0.010000, 'EUR', 'delivered', 'DELIVRD', '2026-06-09 15:39:24.389449', NULL, NULL, NULL, NULL, NULL, NULL, 1, 0, 0, '2026-06-09 15:39:21.291441', '2026-06-09 15:39:24.389449', '2026-06-09 15:39:21.291441', NULL);
 
 
 --
@@ -2046,7 +2057,7 @@ INSERT INTO public.routes VALUES (4, 'Voice OTP Fallback', '{5}', 'priority', tr
 -- Data for Name: suppliers; Type: TABLE DATA; Schema: public; Owner: sms_user
 --
 
-INSERT INTO public.suppliers VALUES (7, 'SMS Gateway', 'SMS Gateway', NULL, NULL, NULL, 'smpp', '5.78.72.23', 2775, 'testing', 'test123', NULL, NULL, NULL, NULL, 'POST', 0.0000, 0.0000, 'EUR', 'bound', 0, 20, 'active', '2026-06-09 11:29:54.511931', '2026-06-09 14:43:01.961522');
+INSERT INTO public.suppliers VALUES (7, 'SMS Gateway', 'SMS Gateway', NULL, NULL, NULL, 'smpp', '5.78.72.23', 2775, 'testing', 'test123', NULL, NULL, NULL, NULL, 'POST', 0.0000, 0.0000, 'EUR', 'bound', 0, 20, 'active', '2026-06-09 11:29:54.511931', '2026-06-09 15:00:36.012601');
 
 
 --
@@ -2071,11 +2082,11 @@ INSERT INTO public.suppliers VALUES (7, 'SMS Gateway', 'SMS Gateway', NULL, NULL
 -- Data for Name: users; Type: TABLE DATA; Schema: public; Owner: sms_user
 --
 
+INSERT INTO public.users VALUES (1, 'admin', '$2b$10$Dgn0lX.YsCknRKpubzLPKupqvy43UK96e1osMOJkbXaDhFiQGqpQK', 'admin@net2app.com', 'super_admin', '{all}', NULL, NULL, 'Super Admin', true, '2026-06-09 15:10:38.174446', '2026-06-09 09:39:09.471572', '2026-06-09 15:10:38.174446');
 INSERT INTO public.users VALUES (2, 'support', '$2b$10$go8iES96OdPXtctpkUwB8O.YL3K.qYt9bXVc2eLpEKJ94JZBLK.rS', 'support@net2app.com', 'support', '{view_clients,view_suppliers,view_sms_logs,test_sms,manage_bind,view_reports}', NULL, NULL, 'Support Team', true, NULL, '2026-06-09 09:39:09.471572', '2026-06-09 09:51:24.733133');
 INSERT INTO public.users VALUES (3, 'billing', '$2b$10$fBqvyfqZV6dZK7axci67HOUM8vuc2rvXcD0qYFNXysz3auDJB3H.y', 'billing@net2app.com', 'billing', '{manage_invoices,manage_payments,view_reports,view_clients,view_suppliers}', NULL, NULL, 'Billing Team', true, NULL, '2026-06-09 09:39:09.471572', '2026-06-09 09:51:24.833456');
 INSERT INTO public.users VALUES (4, 'techcorp_user', '$2b$10$Zt.WIqiILxykAjWoVZPKDOgi10wCEzOzQOdPd67xvrEzsFzYoVnhy', 'user@techcorp.com', 'client', '{view_own_cdr,view_own_usage,view_own_payments,test_sms,send_sms}', NULL, NULL, 'TechCorp Client', true, NULL, '2026-06-09 09:39:09.471572', '2026-06-09 09:51:24.93314');
 INSERT INTO public.users VALUES (5, 'globalsms_user', '$2b$10$sfB9PCsRuYtfTtIcXyz4oOCy0EIic0fi3f8hiOc0cLwDFL9tIpBWi', 'user@globalsms.com', 'supplier', '{view_own_cdr,view_own_usage,view_own_payments,view_bind_status}', NULL, NULL, 'GlobalSMS Supplier', true, NULL, '2026-06-09 09:39:09.471572', '2026-06-09 09:51:25.03261');
-INSERT INTO public.users VALUES (1, 'admin', '$2b$10$Dgn0lX.YsCknRKpubzLPKupqvy43UK96e1osMOJkbXaDhFiQGqpQK', 'admin@net2app.com', 'super_admin', '{all}', NULL, NULL, 'Super Admin', true, '2026-06-09 14:14:55.890154', '2026-06-09 09:39:09.471572', '2026-06-09 14:14:55.890154');
 
 
 --
@@ -2220,7 +2231,7 @@ SELECT pg_catalog.setval('public.routes_id_seq', 4, true);
 -- Name: sms_logs_id_seq; Type: SEQUENCE SET; Schema: public; Owner: sms_user
 --
 
-SELECT pg_catalog.setval('public.sms_logs_id_seq', 1, false);
+SELECT pg_catalog.setval('public.sms_logs_id_seq', 8, true);
 
 
 --
@@ -2993,5 +3004,5 @@ GRANT ALL ON SCHEMA public TO sms_user;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict BwMvjgpt7vsE1dmWFvCYaIcb5vS1YrH5CXe5lBhs7DCHBofSSy4dVDqOxdmxoeR
+\unrestrict s9AGRICbiu7NZJNmGL0epAixM6Kdj3ft5YOuCaLNvfpZOjTLswv96FA5Nry98bh
 
