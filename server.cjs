@@ -12,11 +12,10 @@ require('dotenv').config();
 const smpp = require('smpp');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'net2app-hub-' + Date.now();
 
 const pool = new Pool({
-  ssl: false,
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 5432,
   database: process.env.DB_NAME || 'net2app_hub',
@@ -258,123 +257,13 @@ tables.forEach(table => {
   });
 });
 
-// SPA fallback
 
 app.listen(PORT, () => {
   console.log(`NET2APP Hub running on port ${PORT}`);
   console.log(`Database: ${pool.options.database} on ${pool.options.host}`);
 });
 
-// ===================== REAL SMPP SERVER (ESME + SMSC) =====================
-const smppServer = smpp.createServer((session) => {
-  console.log(`[SMPP] New connection from ${session.socket.remoteAddress}`);
-  let boundSystemId = null;
-
-  session.on('bind_transceiver', async (pdu) => {
-    const { system_id, password } = pdu;
-    console.log(`[SMPP] Bind TRX request: system_id=${system_id}`);
-    try {
-      const r = await pool.query("SELECT * FROM clients WHERE smpp_username=$1 AND status='active'", [system_id]);
-      if (r.rows.length > 0 && r.rows[0].smpp_password === password) {
-        boundSystemId = system_id;
-        session.send(pdu.response());
-        console.log(`[SMPP] ${system_id} BOUND as TRX`);
-      } else {
-        session.send(pdu.response({ command_status: 14 }));
-        console.log(`[SMPP] ${system_id} bind FAILED`);
-      }
-    } catch (e) { session.send(pdu.response({ command_status: 14 })); }
-  });
-
-  session.on('bind_transmitter', async (pdu) => {
-    const { system_id, password } = pdu;
-    console.log(`[SMPP] Bind TX request: system_id=${system_id}`);
-    try {
-      const r = await pool.query("SELECT * FROM clients WHERE smpp_username=$1 AND status='active'", [system_id]);
-      if (r.rows.length > 0 && r.rows[0].smpp_password === password) {
-        boundSystemId = system_id;
-        session.send(pdu.response());
-        console.log(`[SMPP] ${system_id} BOUND as TX`);
-      } else {
-        session.send(pdu.response({ command_status: 14 }));
-      }
-    } catch (e) { session.send(pdu.response({ command_status: 14 })); }
-  });
-
-  session.on('bind_receiver', async (pdu) => {
-    const { system_id, password } = pdu;
-    console.log(`[SMPP] Bind RX request: system_id=${system_id}`);
-    try {
-      const r = await pool.query("SELECT * FROM clients WHERE smpp_username=$1 AND status='active'", [system_id]);
-      if (r.rows.length > 0 && r.rows[0].smpp_password === password) {
-        boundSystemId = system_id;
-        session.send(pdu.response());
-        console.log(`[SMPP] ${system_id} BOUND as RX`);
-      } else {
-        session.send(pdu.response({ command_status: 14 }));
-      }
-    } catch (e) { session.send(pdu.response({ command_status: 14 })); }
-  });
-
-  session.on('submit_sm', async (pdu) => {
-    if (!boundSystemId) { session.send(pdu.response({ command_status: 3 })); return; }
-    const messageId = `SMPP_${Date.now()}_${Math.random().toString(36).substr(2,6)}`;
-    try {
-      const client = await pool.query("SELECT * FROM clients WHERE smpp_username=$1", [boundSystemId]);
-      if (client.rows.length > 0) {
-        const c = client.rows[0];
-        await pool.query(
-          "INSERT INTO sms_logs (message_id, client_id, client_code, sender_id, destination, message, message_parts, status, submit_time) VALUES ($1,$2,$3,$4,$5,$6,$7,'submitted',NOW())",
-          [messageId, c.id, c.client_code, pdu.source_addr, pdu.destination_addr, pdu.short_message?.message || '', 1]
-        );
-      }
-    } catch (e) { console.error('[SMPP] DB error:', e.message); }
-    session.send(pdu.response({ message_id: messageId }));
-  });
-
-  session.on('deliver_sm', (pdu) => { session.send(pdu.response()); });
-  session.on('unbind', (pdu) => { session.send(pdu.response()); session.close(); });
-  session.on('error', (err) => { console.error('[SMPP] Session:', err.message); });
-  session.on('close', () => { console.log(`[SMPP] ${boundSystemId || '?'} disconnected`); });
-});
-
-const SMPP_PORT = process.env.SMPP_PORT || 2775;
-smppServer.listen(SMPP_PORT, '0.0.0.0', () => {
-  console.log(`[SMPP] ESME Server listening on 0.0.0.0:${SMPP_PORT} (TRX/TX/RX)`);
-});
-
-// Connect to suppliers as ESME client
-setTimeout(async () => {
-  try {
-    const suppliers = await pool.query("SELECT * FROM suppliers WHERE status='active' AND connection_type='smpp' AND smpp_host IS NOT NULL AND smpp_port IS NOT NULL");
-    for (const sup of suppliers.rows) {
-      console.log(`[SMPP] Connecting to SMSC ${sup.supplier_code} @ ${sup.smpp_host}:${sup.smpp_port}`);
-      try {
-        const sess = smpp.connect({ url: `smpp://${sup.smpp_host}:${sup.smpp_port}` });
-        sess.on('connect', () => {
-          sess.bind_transceiver({ system_id: sup.smpp_username, password: sup.smpp_password, system_type: 'SMPP' }, async (pdu) => {
-            if (pdu.command_status === 0) {
-              await pool.query("UPDATE suppliers SET bind_status='bound', consecutive_failures=0 WHERE id=$1", [sup.id]);
-              console.log(`[SMPP] Bound to SMSC ${sup.supplier_code}`);
-            } else {
-              await pool.query("UPDATE suppliers SET bind_status='unbound', consecutive_failures=consecutive_failures+1 WHERE id=$1", [sup.id]);
-            }
-          });
-        });
-        sess.on('error', async () => { await pool.query("UPDATE suppliers SET bind_status='unbound', consecutive_failures=consecutive_failures+1 WHERE id=$1", [sup.id]); });
-        sess.on('close', async () => { await pool.query("UPDATE suppliers SET bind_status='unbound' WHERE id=$1", [sup.id]); });
-      } catch (e) { console.error(`[SMPP] SMSC ${sup.supplier_code}:`, e.message); }
-    }
-  } catch (e) { console.error('[SMPP] Supplier connect error:', e.message); }
-}, 3000);
-
-// ===================== BIND STATUS HEARTBEAT =====================
-// Keep bind_status in sync with actual SMPP connections
-setInterval(async () => {
-  try {
-
 // ===================== SMPP AUTO-RECONNECT =====================
-// Maintain persistent SMPP connections to all active suppliers
 const activeSMPPSessions = new Map();
 
 async function maintainSupplierConnections() {
@@ -382,81 +271,75 @@ async function maintainSupplierConnections() {
     const suppliers = await pool.query(
       "SELECT * FROM suppliers WHERE status='active' AND connection_type='smpp' AND smpp_host IS NOT NULL AND smpp_port IS NOT NULL"
     );
-    
     for (const sup of suppliers.rows) {
-      const key = `supplier_${sup.id}`;
-      
-      // Skip if already connected
+      const key = 'supplier_' + sup.id;
       if (activeSMPPSessions.has(key)) {
         const existing = activeSMPPSessions.get(key);
         if (existing && !existing.destroyed) continue;
         activeSMPPSessions.delete(key);
       }
-      
-      console.log(`[SMPP] Connecting to ${sup.supplier_code} @ ${sup.smpp_host}:${sup.smpp_port}`);
-      
+      console.log('[SMPP] Connecting to ' + sup.supplier_code + ' @ ' + sup.smpp_host + ':' + sup.smpp_port);
       try {
-        const session = smpp.connect({
-          url: `smpp://${sup.smpp_host}:${sup.smpp_port}`,
-          connect_timeout: 5000,
-        });
-        
-        session.on('connect', () => {
-          session.bind_transceiver({
-            system_id: sup.smpp_username || 'net2app',
-            password: sup.smpp_password || '',
-            system_type: 'SMPP',
-          }, async (pdu) => {
+        const session = smpp.connect({ url: 'smpp://' + sup.smpp_host + ':' + sup.smpp_port, connect_timeout: 5000 });
+        session.on('connect', function() {
+          session.bind_transceiver({ system_id: sup.smpp_username || 'net2app', password: sup.smpp_password || '', system_type: 'SMPP' }, async function(pdu) {
             if (pdu.command_status === 0) {
-              await pool.query(
-                "UPDATE suppliers SET bind_status='bound', consecutive_failures=0 WHERE id=$1", [sup.id]
-              );
-              console.log(`[SMPP] ✅ Bound to ${sup.supplier_code}`);
+              await pool.query("UPDATE suppliers SET bind_status='bound', consecutive_failures=0 WHERE id=$1", [sup.id]);
+              console.log('[SMPP] Bound to ' + sup.supplier_code);
             } else {
-              await pool.query(
-                "UPDATE suppliers SET bind_status='unbound', consecutive_failures=consecutive_failures+1 WHERE id=$1", [sup.id]
-              );
-              console.log(`[SMPP] ❌ Bind failed for ${sup.supplier_code}: status=${pdu.command_status}`);
+              await pool.query("UPDATE suppliers SET bind_status='unbound', consecutive_failures=consecutive_failures+1 WHERE id=$1", [sup.id]);
               session.close();
             }
           });
         });
-        
-        session.on('error', async (err) => {
-          console.error(`[SMPP] ${sup.supplier_code} error:`, err.message);
-          await pool.query(
-            "UPDATE suppliers SET bind_status='unbound', consecutive_failures=consecutive_failures+1 WHERE id=$1", [sup.id]
-          );
+        session.on('error', async function(err) {
+          await pool.query("UPDATE suppliers SET bind_status='unbound', consecutive_failures=consecutive_failures+1 WHERE id=$1", [sup.id]);
           activeSMPPSessions.delete(key);
         });
-        
-        session.on('close', async () => {
-          console.log(`[SMPP] ${sup.supplier_code} connection closed`);
-          await pool.query(
-            "UPDATE suppliers SET bind_status='unbound' WHERE id=$1", [sup.id]
-          );
+        session.on('close', async function() {
+          await pool.query("UPDATE suppliers SET bind_status='unbound' WHERE id=$1", [sup.id]);
           activeSMPPSessions.delete(key);
-          // Auto-reconnect after 2 seconds
-          setTimeout(() => maintainSupplierConnections(), 2000);
+          setTimeout(maintainSupplierConnections, 2000);
         });
-        
         activeSMPPSessions.set(key, session);
-        
       } catch (e) {
-        console.error(`[SMPP] Failed to connect to ${sup.supplier_code}:`, e.message);
-        await pool.query(
-          "UPDATE suppliers SET bind_status='unbound', consecutive_failures=consecutive_failures+1 WHERE id=$1", [sup.id]
-        );
+        console.error('[SMPP] Failed to connect to ' + sup.supplier_code + ': ' + e.message);
       }
     }
   } catch (e) {
-    console.error('[SMPP] Connection manager error:', e.message);
+    console.error('[SMPP] Connection manager error: ' + e.message);
   }
 }
 
-// Initial connection after 2 seconds
-setTimeout(maintainSupplierConnections, 2000);
+// Start SMPP server for ESME clients
+const smppServer = smpp.createServer(function(session) {
+  console.log('[SMPP] New connection from ' + session.socket.remoteAddress);
+  var boundSystemId = null;
+  session.on('bind_transceiver', async function(pdu) {
+    try {
+      var r = await pool.query("SELECT * FROM clients WHERE smpp_username=$1 AND status='active'", [pdu.system_id]);
+      if (r.rows.length > 0 && r.rows[0].smpp_password === pdu.password) {
+        boundSystemId = pdu.system_id;
+        session.send(pdu.response());
+        console.log('[SMPP] ' + pdu.system_id + ' BOUND as TRX');
+      } else {
+        session.send(pdu.response({ command_status: 14 }));
+      }
+    } catch (e) { session.send(pdu.response({ command_status: 14 })); }
+  });
+  session.on('submit_sm', async function(pdu) {
+    if (!boundSystemId) { session.send(pdu.response({ command_status: 3 })); return; }
+    var messageId = 'SMPP_' + Date.now();
+    session.send(pdu.response({ message_id: messageId }));
+  });
+  session.on('unbind', function(pdu) { session.send(pdu.response()); session.close(); });
+  session.on('error', function(err) {});
+  session.on('close', function() {});
+});
 
-// Re-check every 30 seconds for any disconnected suppliers
+smppServer.listen(2775, '0.0.0.0', function() {
+  console.log('[SMPP] ESME Server listening on 0.0.0.0:2775');
+});
+
+setTimeout(maintainSupplierConnections, 3000);
 setInterval(maintainSupplierConnections, 30000);
-
